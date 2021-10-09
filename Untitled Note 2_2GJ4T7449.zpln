@@ -1,0 +1,300 @@
+﻿{
+  "paragraphs": [
+    {
+      "user": "anonymous",
+      "progress": 0,
+      "config": {
+        "editorSetting": {
+          "language": "java",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "colWidth": 12,
+        "editorMode": "ace/mode/java",
+        "fontSize": 9,
+        "results": {},
+        "enabled": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "apps": [],
+      "runtimeInfos": {},
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_1633786509736_510447251",
+      "id": "paragraph_1633786509736_510447251",
+      "dateCreated": "2021-10-09T16:35:09+0300",
+      "status": "FINISHED",
+      "focus": true,
+      "$$hashKey": "object:4005",
+      "text": "%java\n\nimport java.net.URI;\nimport java.util.ArrayList;\nimport java.util.Arrays;\nimport java.util.List;\nimport java.util.regex.Pattern;\n\nimport org.apache.spark.SparkConf;\nimport org.apache.spark.SparkContext;\nimport org.apache.spark.api.java.JavaPairRDD;\nimport org.apache.spark.api.java.JavaRDD;\nimport org.apache.spark.api.java.JavaSparkContext;\nimport org.apache.spark.api.java.function.Function;\nimport org.apache.spark.api.java.function.Function2;\nimport org.apache.spark.api.java.function.PairFunction;\nimport org.apache.spark.sql.Dataset;\nimport org.apache.spark.sql.Row;\nimport org.apache.spark.sql.RowFactory;\nimport org.apache.spark.sql.SQLContext;\nimport org.apache.spark.sql.SparkSession;\nimport org.apache.spark.sql.functions;\nimport org.apache.spark.sql.catalyst.encoders.RowEncoder;\nimport org.apache.spark.sql.types.DataTypes;\nimport org.apache.spark.sql.types.StructField;\nimport org.apache.spark.sql.types.StructType;\n\nimport scala.Tuple2;\n\npublic class FifthTask {\n\n\tpublic static void main(String[] args) throws Exception{\n\t\n\t \tSparkSession spark = SparkSession\n\t \t\t.builder()\n\t \t\t.appName(\"Test\")\n\t \t\t.master(\"local\")\n\t \t\t.getOrCreate();\n\t\t\n\t \tSQLContext sqlContext = new SQLContext(spark);\n\t \t\n\t \tDataset<Row> csvFileDF = spark.read().format(\"csv\")\n\t \t\t    .option(\"header\", \"true\")\n\t \t\t    .option(\"delimiter\", \",\")\n\t \t\t    .load(\"hdfs://127.0.0.1:9000/task3/input/data/*\");\n\t \t\n\t \t// sourceLogPaths is an array of different file names\n\t \tJavaRDD<String> textFile = spark.read().textFile(\"hdfs://127.0.0.1:9000/task3/input/data/*\").javaRDD();\n\t \tJavaRDD<Row> rowRDD = textFile.map(RowFactory::create);\n\t \t\n\t \tList<StructField> fields = Arrays.asList(DataTypes.createStructField(\"line\", DataTypes.StringType, true)); \n\t \tStructType schema = DataTypes.createStructType(fields);\n\n\t \tDataset<Row> df = sqlContext.createDataFrame(rowRDD, schema).withColumn(\"file_name\", functions.input_file_name());\n\t \tdf.show();\n\t \t\n\t \tJavaRDD<Row> lines = df.javaRDD();\n\t \t\n\t \tJavaPairRDD<String, String> pairedLines =lines.mapToPair(new PairFunction<Row, String, String>() {\n\t \t\t\n\t \t\t\n\t\t\t/**\n\t\t\t * \n\t\t\t */\n\t\t\tprivate static final long serialVersionUID = 1L;\n\t\t\t\n\t\t\t@Override\n\t\t\tpublic Tuple2<String, String> call(Row row) throws Exception {\n\t\t\t\t// TODO Auto-generated method stub\n\t\t\t\t\n\t\t\t\t\n\t\t\t\tString[] pathParts = row.getAs(\"file_name\").toString().split(\"/\");\n\t\t\t\tString[] nameParts = pathParts[pathParts.length-1].split(\"\\\\.\");\n\t\t\t\tString line = row.getAs(\"line\");\n\t\t\t\tString[] tokens = line.split(\"\\\\,\");\n\t\t\t\t\n\t\t\t\ttry {\n\t\t\t\t\tString type, h, u, res;\n\t\t\t\t\tif(nameParts[0].equals(\"stationlog\")) {\n\t\t\t\t\t\ttype = \"sta\";\n\t\t\t\t\t\th = nameParts[1];\n\t\t\t\t\t\t\n\t\t\t\t\t\tint minute = (((int)Double.parseDouble(tokens[1])-60*60*24*6)/60/5)*5;\n\t\t\t\t\t\tint day = (((int)Double.parseDouble(tokens[1]))/60/60/24)+1;\n\t\t\t\t\t\tif(day == 7) {\n\t\t\t\t\t\t\tTuple2<String, String> result = new Tuple2<String, String>(\"sta|\"+h+\"|\"+minute+\"|\", tokens[2]+\"|\"+\"1\");\n\t\t\t\t\t\t\treturn result;\n\t\t\t\t\t\t}else {\n\t\t\t\t\t\t\tTuple2<String, String> result = new Tuple2<String, String>(\"error|sta\", \"not a seven day\");\n\t\t\t\t\t\t\treturn result;\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\telse if(nameParts[0].equals(\"userlog\")) {\n\t\t\t\t\t\ttype = \"usr\";\n\t\t\t\t\t\th = nameParts[1];\n\t\t\t\t\t\tu = nameParts[2];\n\t\t\t\t\t\tint minute = (((int)Double.parseDouble(tokens[1]))/60/5)*5;\n\t\t\t\t\t\tif(tokens[0].equals(\"7\")) {\n\t\t\t\t\t\t\tTuple2<String, String> result = new Tuple2<String, String>(\"usr|\"+u+\"|\"+h+\"|\"+minute+\"|\", tokens[2]+\"|\"+\"1\");\n\t\t\t\t\t\t\treturn result;\n\t\t\t\t\t\t}else {\n\t\t\t\t\t\t\tTuple2<String, String> result = new Tuple2<String, String>(\"error|usr\", \"not a seven day\");\n\t\t\t\t\t\t\treturn result;\n\t\t\t\t\t\t}\n\t\t\t\t\t}else {\n\t\t\t\t\t\tTuple2<String, String> result = new Tuple2<String, String>(\"error\", \"not a user and not a station\");\n\t\t\t\t\t\treturn result;\n\t\t\t\t\t}\n\t\t\t\t}catch(Exception e){\n\t\t\t\t\tTuple2<String, String> result = new Tuple2<String, String>(\"error\", e.getMessage());\n\t\t\t\t\treturn result;\n\t\t\t\t}\t\t\t\t\t\n\t\t\t}\n\t\t});\n\t \t\n\t \tJavaPairRDD<String, String> pairedLines2 = pairedLines.filter(new Function<Tuple2<String,String>, Boolean>() {\n\t\t\t\n\t\t\t@Override\n\t\t\tpublic Boolean call(Tuple2<String, String> pair) throws Exception {\n\t\t\t\treturn !pair._1().contains(\"error\");\n\t\t\t}\n\t\t});\n\t \t\n\t \tJavaPairRDD<String, String> pairedLines3 = pairedLines2.reduceByKey(new Function2<String, String, String>() {\n\t\t\t\n\t\t\t@Override\n\t\t\tpublic String call(String accum, String newVal) throws Exception {\n\t\t\t\t// TODO Auto-generated method stub\n\t\t\t\t\n\t\t\t\tString[] accumArr = accum.split(\"\\\\|\");\n\t\t\t\tString[] valArr = newVal.split(\"\\\\|\");\n\t\t\t\t\n\t\t\t\tDouble curval = Double.parseDouble(valArr[0]);\n\t\t\t\tint cur_amount = Integer.parseInt(valArr[1]);\n\t\t\t\t\n\t\t\t\tDouble sum = Double.parseDouble(accumArr[0]);\n\t\t\t\tint amount = Integer.parseInt(accumArr[1]);\n\t\t\t\t\n\t\t\t\tsum += curval;\n\t\t\t\tamount += cur_amount;\n\t\t\t\t\n\t\t\t\treturn sum+\"|\"+amount;\n\t\t\t}\n\t\t});\n\t \t\n\t \t\n\t \tJavaPairRDD<String, String> pairedLines4 = pairedLines3.mapToPair(new PairFunction<Tuple2<String,String>, String, String>() {\n\n\t\t\t@Override\n\t\t\tpublic Tuple2<String, String> call(Tuple2<String, String> t) throws Exception {\n\t\t\t\tString[] tokens = (t._1()+t._2()).split(\"\\\\|\");\n\t\t\t\ttry{\n\t\t\t\t\tString type = tokens[0];\n\t\t\t\t\tif(type.equals(\"usr\")) {\n\t\t\t\t\t\tString h = tokens[2];\n\t\t\t\t\t\tString minute = tokens[3];\n\t\t\t\t\t\tDouble avg = Double.parseDouble(tokens[4])/Integer.parseInt(tokens[5]);\n\t\t\t\t\t\tTuple2<String, String> result = new Tuple2<String, String>(h+\"|\"+minute+\"|\", avg+\"|0.0\");\n\t\t\t\t\t\treturn result;\n\t\t\t\t\t}else if(type.equals(\"sta\")) {\n\t\t\t\t\t\tString h = tokens[1];\n\t\t\t\t\t\tString minute = tokens[2];\n\t\t\t\t\t\tDouble avg = Double.parseDouble(tokens[3])/Integer.parseInt(tokens[4]);\n\t\t\t\t\t\tTuple2<String, String> result = new Tuple2<String, String>(h+\"|\"+minute+\"|\", \"0.0|\"+avg);\n\t\t\t\t\t\treturn result;\n\t\t\t\t\t}else {\n\t\t\t\t\t\tTuple2<String, String> result = new Tuple2<String, String>(\"error\", type+\" is wrong type\");\n\t\t\t\t\t\treturn result;\n\t\t\t\t\t}\n\t\t\t\t}catch(Exception e){\n\t\t\t\t\tTuple2<String, String> result = new Tuple2<String, String>(\"error\", e.getMessage());\n\t\t\t\t\treturn result;\n\t\t\t\t}\n\t\t\t}\n\t \t\t\n\t\t});\n\t \t\n\t\t\n\t \tJavaPairRDD<String, String> pairedLines5 = pairedLines4.reduceByKey(new Function2<String, String, String>() {\n\t\t\t\n\t\t\t@Override\n\t\t\tpublic String call(String accum, String newVal) throws Exception {\n\t\t\t\t// TODO Auto-generated method stub\n\t\t\t\t\n\t\t\t\tString[] accumArr = accum.split(\"\\\\|\");\n\t\t\t\tString[] valArr = newVal.split(\"\\\\|\");\n\t\t\t\t\n\t\t\t\tDouble sumSpeed = Double.parseDouble(accumArr[0]);\n\t\t\t\tDouble sumErr = Double.parseDouble(accumArr[1]);\n\t\t\t\t\n\t\t\t\tDouble Speed = Double.parseDouble(valArr[0]);\n\t\t\t\tDouble err = Double.parseDouble(valArr[1]);\n\t\t\t\t\n\t\t\t\tsumSpeed += Speed;\n\t\t\t\tsumErr += err;\n\t\t\t\t\n\t\t\t\treturn sumSpeed+\"|\"+sumErr;\n\t\t\t}\n\t\t});\n\t \t\n\t \tJavaRDD<String> resultLines = pairedLines5.map(new Function<Tuple2<String,String>, String>() {\n\n\t\t\t@Override\n\t\t\tpublic String call(Tuple2<String, String> v1) throws Exception {\n\t\t\t\t// TODO Auto-generated method stub\n\t\t\t\treturn v1._1()+v1._2();\n\t\t\t}\n\t\t});\n\t \n\t\t\n\t \tresultLines.saveAsTextFile(\"hdfs://127.0.0.1:9000/task5/output5.csv\");\n\t \t\n\t\tspark.stop();\n\t\t\n\t}\n\n}\n",
+      "dateUpdated": "2021-10-09T16:35:32+0300",
+      "dateFinished": "2021-10-09T16:38:32+0300",
+      "dateStarted": "2021-10-09T16:35:32+0300",
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TEXT",
+            "data": "+--------------------+--------------------+\n|                line|           file_name|\n+--------------------+--------------------+\n|Day,\tTickTime,\tSpeed|hdfs://127.0.0.1:...|\n|1,\t20940.98652374...|hdfs://127.0.0.1:...|\n|1,\t20960.40651757...|hdfs://127.0.0.1:...|\n|1,\t21009.83978284...|hdfs://127.0.0.1:...|\n|1,\t21018.06547120...|hdfs://127.0.0.1:...|\n|1,\t21070.22285544...|hdfs://127.0.0.1:...|\n|1,\t21108.39040614...|hdfs://127.0.0.1:...|\n|1,\t21123.98496606...|hdfs://127.0.0.1:...|\n|1,\t21153.09067499...|hdfs://127.0.0.1:...|\n|1,\t21160.08286447...|hdfs://127.0.0.1:...|\n|1,\t21207.22949457...|hdfs://127.0.0.1:...|\n|1,\t21219.12778253...|hdfs://127.0.0.1:...|\n|1,\t21227.13842748...|hdfs://127.0.0.1:...|\n|1,\t21230.70306947...|hdfs://127.0.0.1:...|\n|1,\t21242.61691305...|hdfs://127.0.0.1:...|\n|1,\t21246.37937378...|hdfs://127.0.0.1:...|\n|1,\t21263.80568221...|hdfs://127.0.0.1:...|\n|1,\t21268.83855892...|hdfs://127.0.0.1:...|\n|1,\t21303.42133051...|hdfs://127.0.0.1:...|\n|1,\t21306.81857512...|hdfs://127.0.0.1:...|\n+--------------------+--------------------+\nonly showing top 20 rows\n\n"
+          }
+        ]
+      }
+    },
+    {
+      "text": "%spark\n\n\nval bankText = spark.read.format(\"csv\").option(\"delimiter\", \"|\").option(\"ESCAPE quote\", '\"').option(\"header\",false).option(\"encoding\", \"utf8\").load(\"hdfs://127.0.0.1:9000/task5/output5.csv\") //sc.textFile(\"hdfs://127.0.0.1:9000/task5/output5.csv\")\n.withColumnRenamed(\"_c0\",\"h\").withColumnRenamed(\"_c1\",\"minute\").withColumnRenamed(\"_c2\",\"speed\").withColumnRenamed(\"_c3\",\"err\")\nbankText.show()\nbankText.registerTempTable(\"bank\")\n/*\ncase class Bank(h : String, minute : Integer, speed : Double, error : Double)\n\n// split each line, filter out header (starts with \"age\"), and map it into Bank case class\nval bank = bankText.map(s=>s.split('|')).map(\n    s=>new Bank(s(0), \n                s(1).toInt,\n                s(2).toDouble,\n                s(3).toDouble \n                )\n)\n\nbank.toDF().show()*/\n\n// convert to DataFrame and create temporal table\n//bank.toDF().registerTempTable(\"bank\")",
+      "user": "anonymous",
+      "dateUpdated": "2021-10-09T17:04:31+0300",
+      "progress": 0,
+      "config": {
+        "editorSetting": {
+          "language": "scala",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "colWidth": 12,
+        "editorMode": "ace/mode/scala",
+        "fontSize": 9,
+        "results": {},
+        "enabled": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "apps": [],
+      "runtimeInfos": {
+        "jobUrl": {
+          "propertyName": "jobUrl",
+          "label": "SPARK JOB",
+          "tooltip": "View in Spark web UI",
+          "group": "spark",
+          "values": [
+            {
+              "jobUrl": "http://192.168.1.70:4040/jobs/job?id=30",
+              "$$hashKey": "object:8585"
+            },
+            {
+              "jobUrl": "http://192.168.1.70:4040/jobs/job?id=31",
+              "$$hashKey": "object:8586"
+            },
+            {
+              "jobUrl": "http://192.168.1.70:4040/jobs/job?id=32",
+              "$$hashKey": "object:8587"
+            }
+          ],
+          "interpreterSettingId": "spark"
+        }
+      },
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_1633786532121_1947039738",
+      "id": "paragraph_1633786532121_1947039738",
+      "dateCreated": "2021-10-09T16:35:32+0300",
+      "status": "FINISHED",
+      "focus": true,
+      "$$hashKey": "object:4079",
+      "dateFinished": "2021-10-09T17:04:31+0300",
+      "dateStarted": "2021-10-09T17:04:31+0300",
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TEXT",
+            "data": "\u001b[33mwarning: \u001b[0mthere was one deprecation warning (since 2.0.0); for details, enable `:setting -deprecation' or `:replay -deprecation'\n+---+------+--------------------+-----+\n|  h|minute|               speed|  err|\n+---+------+--------------------+-----+\n|h64|    60| 9.414724860744974E7|  0.0|\n|h64|  1340| 1.139141207947727E8|  0.0|\n|h52|   205|  7.80257083332236E7|  0.0|\n| h8|   500|1.3681511675191462E8|  0.0|\n| h8|     0|5.8962851818462536E7|  0.0|\n|h52|   795|1.3205915855015686E8|327.0|\n|h52|  1030| 1.228382004281136E8|265.0|\n|h31|   190| 7.541816805491686E7|  0.0|\n|h52|   980|1.3764614563198578E8|  0.0|\n|h52|   590|1.0729514954942128E8|  0.0|\n|h31|   970|1.2584929887742116E8|  0.0|\n|h52|    65|   6.4168230798611E7|  0.0|\n| h8|  1025|1.3070860159534805E8|  0.0|\n| h8|  1210|1.4535967597287774E8|  0.0|\n|h31|  1090|1.5388507488596663E8|  0.0|\n|h64|     0| 5.896326372751604E7|  0.0|\n|h31|  1295|1.0590116065487796E8|  0.0|\n| h8|    25| 8.019097778003377E7|  0.0|\n|h52|  1235|1.2193870982837933E8|  0.0|\n|h31|   785|1.2942086791175912E8|  0.0|\n+---+------+--------------------+-----+\nonly showing top 20 rows\n\n\u001b[1m\u001b[34mbankText\u001b[0m: \u001b[1m\u001b[32morg.apache.spark.sql.DataFrame\u001b[0m = [h: string, minute: string ... 2 more fields]\n"
+          }
+        ]
+      }
+    },
+    {
+      "text": "%spark.sql\nselect h, round(speed/20000000)*20000000 as speed, sum(double(err)) as err_distr from bank  group by h, round(speed/20000000)\n",
+      "user": "anonymous",
+      "dateUpdated": "2021-10-09T17:16:09+0300",
+      "progress": 0,
+      "config": {
+        "editorSetting": {
+          "language": "sql",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "colWidth": 12,
+        "editorMode": "ace/mode/sql",
+        "fontSize": 9,
+        "results": {
+          "0": {
+            "graph": {
+              "mode": "scatterChart",
+              "height": 300,
+              "optionOpen": true,
+              "setting": {
+                "table": {
+                  "tableGridState": {},
+                  "tableColumnTypeState": {
+                    "names": {
+                      "speed": "string",
+                      "err_distr": "string"
+                    },
+                    "updated": false
+                  },
+                  "tableOptionSpecHash": "[{\"name\":\"useFilter\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable filter for columns\"},{\"name\":\"showPagination\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable pagination for better navigation\"},{\"name\":\"showAggregationFooter\",\"valueType\":\"boolean\",\"defaultValue\":false,\"widget\":\"checkbox\",\"description\":\"Enable a footer for displaying aggregated values\"}]",
+                  "tableOptionValue": {
+                    "useFilter": false,
+                    "showPagination": false,
+                    "showAggregationFooter": false
+                  },
+                  "updated": false,
+                  "initialized": false
+                },
+                "multiBarChart": {
+                  "rotate": {
+                    "degree": "-45"
+                  },
+                  "xLabelStatus": "default",
+                  "stacked": true
+                },
+                "stackedAreaChart": {
+                  "rotate": {
+                    "degree": "-45"
+                  },
+                  "xLabelStatus": "default"
+                },
+                "scatterChart": {
+                  "xAxis": {
+                    "name": "speed",
+                    "index": 1,
+                    "aggr": "sum"
+                  },
+                  "group": {
+                    "name": "h",
+                    "index": 0,
+                    "aggr": "sum"
+                  }
+                }
+              },
+              "keys": [
+                {
+                  "name": "speed",
+                  "index": 1,
+                  "aggr": "sum"
+                }
+              ],
+              "groups": [],
+              "values": [
+                {
+                  "name": "err_distr",
+                  "index": 2,
+                  "aggr": "sum"
+                }
+              ]
+            },
+            "helium": {}
+          }
+        },
+        "enabled": true
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "apps": [],
+      "runtimeInfos": {
+        "jobUrl": {
+          "propertyName": "jobUrl",
+          "label": "SPARK JOB",
+          "tooltip": "View in Spark web UI",
+          "group": "spark",
+          "values": [
+            {
+              "jobUrl": "http://192.168.1.70:4040/jobs/job?id=86",
+              "$$hashKey": "object:18246"
+            },
+            {
+              "jobUrl": "http://192.168.1.70:4040/jobs/job?id=87",
+              "$$hashKey": "object:18247"
+            },
+            {
+              "jobUrl": "http://192.168.1.70:4040/jobs/job?id=88",
+              "$$hashKey": "object:18248"
+            },
+            {
+              "jobUrl": "http://192.168.1.70:4040/jobs/job?id=89",
+              "$$hashKey": "object:18249"
+            },
+            {
+              "jobUrl": "http://192.168.1.70:4040/jobs/job?id=90",
+              "$$hashKey": "object:18250"
+            }
+          ],
+          "interpreterSettingId": "spark"
+        }
+      },
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_1633787226078_924565374",
+      "id": "paragraph_1633787226078_924565374",
+      "dateCreated": "2021-10-09T16:47:06+0300",
+      "status": "FINISHED",
+      "focus": true,
+      "$$hashKey": "object:4182",
+      "dateFinished": "2021-10-09T17:15:38+0300",
+      "dateStarted": "2021-10-09T17:15:37+0300",
+      "results": {
+        "code": "SUCCESS",
+        "msg": [
+          {
+            "type": "TABLE",
+            "data": "h\tspeed\terr_distr\nh8\t6.0E7\t541.0\nh52\t1.6E8\t581.0\nh8\t1.6E8\t581.0\nh31\t1.2E8\t902.0\nh64\t1.4E8\t958.0\nh52\t1.2E8\t1168.0\nh64\t6.0E7\t0.0\nh64\t1.6E8\t558.0\nh64\t1.0E8\t527.0\nh52\t1.4E8\t640.0\nh64\t2.0E8\t0.0\nh52\t1.0E8\t888.0\nh31\t1.4E8\t851.0\nh64\t8.0E7\t553.0\nh52\t8.0E7\t305.0\nh52\t1.8E8\t273.0\nh8\t1.4E8\t824.0\nh31\t6.0E7\t275.0\nh31\t2.0E8\t0.0\nh52\t6.0E7\t0.0\nh64\t1.2E8\t907.0\nh8\t1.8E8\t0.0\nh8\t1.2E8\t849.0\nh64\t1.8E8\t0.0\nh31\t1.6E8\t600.0\nh8\t8.0E7\t0.0\nh31\t8.0E7\t536.0\nh52\t2.0E8\t0.0\nh31\t1.0E8\t290.0\nh31\t1.8E8\t0.0\nh8\t1.0E8\t565.0\n"
+          }
+        ]
+      }
+    },
+    {
+      "text": "%spark.sql\n",
+      "user": "anonymous",
+      "dateUpdated": "2021-10-09T16:47:34+0300",
+      "progress": 0,
+      "config": {
+        "colWidth": 12,
+        "fontSize": 9,
+        "enabled": true,
+        "results": {},
+        "editorSetting": {
+          "language": "scala",
+          "editOnDblClick": false,
+          "completionKey": "TAB",
+          "completionSupport": true
+        },
+        "editorMode": "ace/mode/scala"
+      },
+      "settings": {
+        "params": {},
+        "forms": {}
+      },
+      "apps": [],
+      "runtimeInfos": {},
+      "progressUpdateIntervalMs": 500,
+      "jobName": "paragraph_1633787254348_49249723",
+      "id": "paragraph_1633787254348_49249723",
+      "dateCreated": "2021-10-09T16:47:34+0300",
+      "status": "READY",
+      "focus": true,
+      "$$hashKey": "object:4282"
+    }
+  ],
+  "name": "Untitled Note 2",
+  "id": "2GJ4T7449",
+  "defaultInterpreterGroup": "spark",
+  "version": "0.10.0",
+  "noteParams": {},
+  "noteForms": {},
+  "angularObjects": {},
+  "config": {
+    "isZeppelinNotebookCronEnable": false,
+    "looknfeel": "default",
+    "personalizedMode": "false"
+  },
+  "info": {},
+  "path": "/Untitled Note 2"
+}
